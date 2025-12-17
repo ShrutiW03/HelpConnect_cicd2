@@ -4,14 +4,12 @@ import Footer from "./Footer";
 
 interface LayoutProps {
   children: ReactNode;
-  isLoggedIn?: boolean;
-  userName?: string;
 }
 
-const Layout = ({ children, isLoggedIn = false, userName = "User" }: LayoutProps) => {
+const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Navbar isLoggedIn={isLoggedIn} userName={userName} />
+      <Navbar />
       <main className="flex-1">{children}</main>
       <Footer />
     </div>
