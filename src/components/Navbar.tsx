@@ -1,15 +1,14 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Heart, Home, Gift, HelpCircle, User, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
-interface NavbarProps {
-  isLoggedIn?: boolean;
-  userName?: string;
-}
-
-const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
+const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -19,6 +18,19 @@ const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast.success("Logged out successfully");
+      navigate("/");
+    } catch (error) {
+      toast.error("Failed to log out");
+    }
+    setMobileMenuOpen(false);
+  };
+
+  const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
@@ -50,7 +62,9 @@ const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
 
           {/* Auth Buttons / User Menu */}
           <div className="hidden md:flex items-center gap-3">
-            {isLoggedIn ? (
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : user ? (
               <>
                 <Link to="/profile">
                   <Button variant="ghost" size="sm" className="gap-2">
@@ -58,7 +72,7 @@ const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
                     {userName}
                   </Button>
                 </Link>
-                <Button variant="outline" size="sm" className="gap-2">
+                <Button variant="outline" size="sm" className="gap-2" onClick={handleLogout}>
                   <LogOut className="h-4 w-4" />
                   Logout
                 </Button>
@@ -102,7 +116,7 @@ const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
                 </Link>
               ))}
               <div className="h-px bg-border my-2" />
-              {isLoggedIn ? (
+              {user ? (
                 <>
                   <Link to="/profile" onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="ghost" className="w-full justify-start gap-2">
@@ -110,7 +124,7 @@ const Navbar = ({ isLoggedIn = false, userName = "User" }: NavbarProps) => {
                       My Profile
                     </Button>
                   </Link>
-                  <Button variant="outline" className="w-full justify-start gap-2">
+                  <Button variant="outline" className="w-full justify-start gap-2" onClick={handleLogout}>
                     <LogOut className="h-4 w-4" />
                     Logout
                   </Button>

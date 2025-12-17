@@ -1,78 +1,96 @@
-import { useState } from "react";
-import { Search, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Layout from "@/components/Layout";
 import DonationCard from "@/components/DonationCard";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
 const CATEGORIES = ["All", "Clothing", "Electronics", "Education", "Food", "Services", "Other"];
 
-const MOCK_DONATIONS = [
-  {
-    id: "1",
-    title: "20 Warm Sweaters",
-    description: "I want to donate 20 sweaters in good condition. Perfect for the winter season.",
-    category: "Clothing",
-    location: "Pune",
-    userName: "Datta",
-    createdAt: "Just now",
-  },
-  {
-    id: "2",
-    title: "Working Microwave",
-    description: "I want to donate a microwave in excellent working condition.",
-    category: "Electronics",
-    location: "Delhi",
-    userName: "Aditya",
-    createdAt: "Just now",
-  },
-  {
-    id: "3",
-    title: "Teaching Services",
-    description: "I am a teacher. I want to teach something in the orphanage for 1 week.",
-    category: "Services",
-    location: "Pune",
-    userName: "Arpita",
-    createdAt: "Just now",
-  },
-  {
-    id: "4",
-    title: "MCA Books Collection",
-    description: "I want to donate books to needy students preparing for competitive exams.",
-    category: "Education",
-    location: "Mumbai",
-    userName: "Shruti",
-    createdAt: "2 hours ago",
-  },
-  {
-    id: "5",
-    title: "Rice and Dal Packets",
-    description: "50 packets of rice and dal ready for distribution to those in need.",
-    category: "Food",
-    location: "Pune",
-    userName: "Ravi",
-    createdAt: "5 hours ago",
-  },
-  {
-    id: "6",
-    title: "Kids Clothing Bundle",
-    description: "Gently used kids clothing for ages 5-10. About 30 items.",
-    category: "Clothing",
-    location: "Bangalore",
-    userName: "Priya",
-    createdAt: "1 day ago",
-  },
-];
+interface Donation {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  location: string | null;
+  created_at: string;
+  user_id: string;
+}
+
+interface Profile {
+  id: string;
+  full_name: string | null;
+}
 
 const Donations = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [donations, setDonations] = useState<(Donation & { userName: string })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredDonations = MOCK_DONATIONS.filter((donation) => {
+  useEffect(() => {
+    fetchDonations();
+  }, []);
+
+  const fetchDonations = async () => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      // Fetch donations
+      const { data: donationsData, error: donationsError } = await supabase
+        .from("donations")
+        .select("*")
+        .eq("status", "available")
+        .order("created_at", { ascending: false });
+
+      if (donationsError) {
+        console.error("Donations fetch error:", donationsError);
+        throw new Error("Failed to load donations");
+      }
+
+      // Fetch profiles for the user names
+      const userIds = [...new Set(donationsData?.map(d => d.user_id) || [])];
+      
+      let profileMap = new Map<string, string>();
+      
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+
+        if (profilesError) {
+          console.error("Profiles fetch error:", profilesError);
+        } else {
+          profilesData?.forEach((p: Profile) => {
+            profileMap.set(p.id, p.full_name || "Anonymous");
+          });
+        }
+      }
+
+      const donationsWithNames = (donationsData || []).map(d => ({
+        ...d,
+        userName: profileMap.get(d.user_id) || "Anonymous"
+      }));
+
+      setDonations(donationsWithNames);
+    } catch (err) {
+      setError("Failed to load donations. Please try again.");
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredDonations = donations.filter((donation) => {
     const matchesSearch = donation.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      donation.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (donation.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     const matchesCategory = selectedCategory === "All" || donation.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -123,8 +141,24 @@ const Donations = () => {
           </div>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-16">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <div className="text-muted-foreground text-lg mb-4">{error}</div>
+            <Button variant="hero" onClick={fetchDonations}>Try Again</Button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && !error && (
+          <div className="text-center py-16">
+            <div className="text-muted-foreground text-lg">Loading donations...</div>
+          </div>
+        )}
+
         {/* Donations Grid */}
-        {filteredDonations.length > 0 ? (
+        {!loading && !error && filteredDonations.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredDonations.map((donation, index) => (
               <div 
@@ -133,17 +167,26 @@ const Donations = () => {
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
                 <DonationCard
-                  {...donation}
+                  id={donation.id}
+                  title={donation.title}
+                  description={donation.description || ""}
+                  category={donation.category}
+                  location={donation.location || "Not specified"}
+                  userName={donation.userName}
+                  createdAt={formatDistanceToNow(new Date(donation.created_at), { addSuffix: true })}
                   onRequest={() => handleRequest(donation.title)}
                 />
               </div>
             ))}
           </div>
-        ) : (
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && filteredDonations.length === 0 && (
           <div className="text-center py-16">
             <div className="text-muted-foreground text-lg mb-4">No donations found</div>
             <p className="text-sm text-muted-foreground mb-6">
-              Try adjusting your search or filters
+              {donations.length > 0 ? "Try adjusting your search or filters" : "Be the first to offer a donation!"}
             </p>
             <Link to="/donate/new">
               <Button variant="hero">Be the First to Donate</Button>

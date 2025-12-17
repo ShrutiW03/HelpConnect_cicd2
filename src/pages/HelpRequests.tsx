@@ -1,84 +1,97 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Layout from "@/components/Layout";
 import HelpRequestCard from "@/components/HelpRequestCard";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
 const CATEGORIES = ["All", "Clothing", "Electronics", "Education", "Food", "Services", "Other"];
 
-const MOCK_REQUESTS = [
-  {
-    id: "1",
-    title: "Need MCA CET Books",
-    description: "I need books for MCA CET preparation. Unable to afford new ones.",
-    category: "Education",
-    location: "Pune",
-    userName: "Aarya",
-    urgency: "medium" as const,
-    createdAt: "Just now",
-  },
-  {
-    id: "2",
-    title: "Winter Clothes for Kids",
-    description: "Looking for warm winter clothes for 3 kids aged 5-10 years.",
-    category: "Clothing",
-    location: "Delhi",
-    userName: "Meera",
-    urgency: "high" as const,
-    createdAt: "1 hour ago",
-  },
-  {
-    id: "3",
-    title: "Food Supplies for Family",
-    description: "Need food supplies for a family of 5. Any help would be greatly appreciated.",
-    category: "Food",
-    location: "Mumbai",
-    userName: "Ramesh",
-    urgency: "high" as const,
-    createdAt: "2 hours ago",
-  },
-  {
-    id: "4",
-    title: "Laptop for Online Classes",
-    description: "Student needs a working laptop for attending online classes.",
-    category: "Electronics",
-    location: "Bangalore",
-    userName: "Sneha",
-    urgency: "medium" as const,
-    createdAt: "5 hours ago",
-  },
-  {
-    id: "5",
-    title: "Math Tutor for Class 10",
-    description: "Looking for a volunteer math tutor for class 10 board preparation.",
-    category: "Services",
-    location: "Pune",
-    userName: "Vikram",
-    urgency: "low" as const,
-    createdAt: "1 day ago",
-  },
-  {
-    id: "6",
-    title: "Medical Supplies",
-    description: "Need basic medical supplies and medicines for elderly parents.",
-    category: "Other",
-    location: "Chennai",
-    userName: "Lakshmi",
-    urgency: "high" as const,
-    createdAt: "2 days ago",
-  },
-];
+interface HelpRequest {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  location: string | null;
+  urgency: string;
+  created_at: string;
+  user_id: string;
+}
+
+interface Profile {
+  id: string;
+  full_name: string | null;
+}
 
 const HelpRequests = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [requests, setRequests] = useState<(HelpRequest & { userName: string })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredRequests = MOCK_REQUESTS.filter((request) => {
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const fetchRequests = async () => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      // Fetch help requests
+      const { data: requestsData, error: requestsError } = await supabase
+        .from("help_requests")
+        .select("*")
+        .eq("status", "open")
+        .order("created_at", { ascending: false });
+
+      if (requestsError) {
+        console.error("Requests fetch error:", requestsError);
+        throw new Error("Failed to load help requests");
+      }
+
+      // Fetch profiles for the user names
+      const userIds = [...new Set(requestsData?.map(r => r.user_id) || [])];
+      
+      let profileMap = new Map<string, string>();
+      
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+
+        if (profilesError) {
+          console.error("Profiles fetch error:", profilesError);
+        } else {
+          profilesData?.forEach((p: Profile) => {
+            profileMap.set(p.id, p.full_name || "Anonymous");
+          });
+        }
+      }
+
+      const requestsWithNames = (requestsData || []).map(r => ({
+        ...r,
+        userName: profileMap.get(r.user_id) || "Anonymous"
+      }));
+
+      setRequests(requestsWithNames);
+    } catch (err) {
+      setError("Failed to load help requests. Please try again.");
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRequests = requests.filter((request) => {
     const matchesSearch = request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (request.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     const matchesCategory = selectedCategory === "All" || request.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -129,8 +142,24 @@ const HelpRequests = () => {
           </div>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-16">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <div className="text-muted-foreground text-lg mb-4">{error}</div>
+            <Button variant="hero" onClick={fetchRequests}>Try Again</Button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && !error && (
+          <div className="text-center py-16">
+            <div className="text-muted-foreground text-lg">Loading help requests...</div>
+          </div>
+        )}
+
         {/* Requests Grid */}
-        {filteredRequests.length > 0 ? (
+        {!loading && !error && filteredRequests.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredRequests.map((request, index) => (
               <div 
@@ -139,17 +168,27 @@ const HelpRequests = () => {
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
                 <HelpRequestCard
-                  {...request}
+                  id={request.id}
+                  title={request.title}
+                  description={request.description || ""}
+                  category={request.category}
+                  location={request.location || "Not specified"}
+                  userName={request.userName}
+                  urgency={request.urgency as "low" | "medium" | "high"}
+                  createdAt={formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
                   onOffer={() => handleOffer(request.title)}
                 />
               </div>
             ))}
           </div>
-        ) : (
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && filteredRequests.length === 0 && (
           <div className="text-center py-16">
             <div className="text-muted-foreground text-lg mb-4">No help requests found</div>
             <p className="text-sm text-muted-foreground mb-6">
-              Try adjusting your search or filters
+              {requests.length > 0 ? "Try adjusting your search or filters" : "Be the first to submit a request!"}
             </p>
             <Link to="/request-help/new">
               <Button variant="hero">Submit a Request</Button>

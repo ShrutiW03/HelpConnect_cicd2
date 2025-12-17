@@ -1,50 +1,99 @@
-import { useState } from "react";
-import { Edit, Trash2, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Edit, Trash2, Plus, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Layout from "@/components/Layout";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { formatDistanceToNow } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-const MOCK_USER_DONATIONS = [
-  {
-    id: "1",
-    title: "MCA Books",
-    description: "I want to donate books to needy students",
-    category: "Education",
-    createdAt: "Just now",
-  },
-  {
-    id: "2",
-    title: "20 Sweaters",
-    description: "I want to donate 20 sweaters",
-    category: "Clothing",
-    createdAt: "Just now",
-  },
-  {
-    id: "3",
-    title: "Microwave",
-    description: "I want to donate a microwave",
-    category: "Electronics",
-    createdAt: "Just now",
-  },
-];
+interface Donation {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  created_at: string;
+}
 
-const MOCK_USER_REQUESTS = [
-  {
-    id: "1",
-    title: "Need Winter Blankets",
-    description: "Looking for warm blankets for the upcoming winter",
-    category: "Clothing",
-    urgency: "medium",
-    createdAt: "2 hours ago",
-  },
-];
+interface HelpRequest {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  urgency: string;
+  created_at: string;
+}
 
 const Profile = () => {
-  const [donations, setDonations] = useState(MOCK_USER_DONATIONS);
-  const [requests, setRequests] = useState(MOCK_USER_REQUESTS);
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [donations, setDonations] = useState<Donation[]>([]);
+  const [requests, setRequests] = useState<HelpRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/login");
+      return;
+    }
+    if (user) {
+      fetchUserData();
+    }
+  }, [user, authLoading, navigate]);
+
+  const fetchUserData = async () => {
+    if (!user) return;
+
+    setError(null);
+    
+    try {
+      const [donationsRes, requestsRes] = await Promise.all([
+        supabase
+          .from("donations")
+          .select("id, title, description, category, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("help_requests")
+          .select("id, title, description, category, urgency, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (donationsRes.error) {
+        console.error("Donations fetch error:", donationsRes.error);
+        throw new Error("Failed to load donations");
+      }
+      
+      if (requestsRes.error) {
+        console.error("Requests fetch error:", requestsRes.error);
+        throw new Error("Failed to load help requests");
+      }
+
+      setDonations(donationsRes.data || []);
+      setRequests(requestsRes.data || []);
+    } catch (err) {
+      setError("Failed to load your data. Please try refreshing the page.");
+      console.error("Profile data fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getCategoryColor = (cat: string) => {
     const colors: Record<string, string> = {
@@ -58,18 +107,74 @@ const Profile = () => {
     return colors[cat] || colors.Other;
   };
 
-  const handleDeleteDonation = (id: string) => {
-    setDonations(donations.filter((d) => d.id !== id));
-    toast.success("Donation deleted successfully");
+  const handleDeleteDonation = async (id: string) => {
+    try {
+      const { error } = await supabase.from("donations").delete().eq("id", id);
+      if (error) {
+        if (error.code === "42501") {
+          toast.error("You don't have permission to delete this donation");
+        } else {
+          toast.error("Failed to delete donation");
+        }
+        console.error("Delete donation error:", error);
+      } else {
+        setDonations(donations.filter((d) => d.id !== id));
+        toast.success("Donation deleted successfully");
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred");
+      console.error("Unexpected delete error:", err);
+    }
   };
 
-  const handleDeleteRequest = (id: string) => {
-    setRequests(requests.filter((r) => r.id !== id));
-    toast.success("Request deleted successfully");
+  const handleDeleteRequest = async (id: string) => {
+    try {
+      const { error } = await supabase.from("help_requests").delete().eq("id", id);
+      if (error) {
+        if (error.code === "42501") {
+          toast.error("You don't have permission to delete this request");
+        } else {
+          toast.error("Failed to delete request");
+        }
+        console.error("Delete request error:", error);
+      } else {
+        setRequests(requests.filter((r) => r.id !== id));
+        toast.success("Request deleted successfully");
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred");
+      console.error("Unexpected delete error:", err);
+    }
   };
+
+  if (authLoading || loading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center py-16">
+            <div className="text-muted-foreground text-lg">Loading...</div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center py-16">
+            <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <div className="text-muted-foreground text-lg mb-4">{error}</div>
+            <Button variant="hero" onClick={() => fetchUserData()}>Try Again</Button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
-    <Layout isLoggedIn={true} userName="Regular User">
+    <Layout>
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -83,8 +188,8 @@ const Profile = () => {
           {/* Tabs */}
           <Tabs defaultValue="donations" className="animate-slide-up" style={{ animationDelay: "0.1s" }}>
             <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="donations">My Donations</TabsTrigger>
-              <TabsTrigger value="requests">My Help Requests</TabsTrigger>
+              <TabsTrigger value="donations">My Donations ({donations.length})</TabsTrigger>
+              <TabsTrigger value="requests">My Help Requests ({requests.length})</TabsTrigger>
             </TabsList>
 
             {/* Donations Tab */}
@@ -119,22 +224,39 @@ const Profile = () => {
                           {donation.description}
                         </p>
                         <p className="text-xs text-muted-foreground mb-4">
-                          Posted: {donation.createdAt}
+                          Posted: {formatDistanceToNow(new Date(donation.created_at), { addSuffix: true })}
                         </p>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" className="flex-1">
                             <Edit className="h-3 w-3" />
                             Edit
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteDonation(donation.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Delete
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Delete
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Donation</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{donation.title}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteDonation(donation.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </div>
                     ))}
@@ -182,22 +304,39 @@ const Profile = () => {
                           {request.description}
                         </p>
                         <p className="text-xs text-muted-foreground mb-4">
-                          Posted: {request.createdAt}
+                          Posted: {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
                         </p>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" className="flex-1">
                             <Edit className="h-3 w-3" />
                             Edit
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteRequest(request.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Delete
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Delete
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Request</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{request.title}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteRequest(request.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </div>
                     ))}
