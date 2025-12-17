@@ -1,0 +1,123 @@
+# -------------------------------
+# 1. PERSISTENT VOLUME CLAIM
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: helpconnect-frontend-pvc
+  namespace: "2401202"
+spec:
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# -------------------------------
+# 2. FRONTEND DEPLOYMENT
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helpconnect-frontend-deployment
+  namespace: "2401202"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: helpconnect-frontend
+  template:
+    metadata:
+      labels:
+        app: helpconnect-frontend
+    spec:
+      automountServiceAccountToken: false
+
+      imagePullSecrets:
+        - name: nexus-secret
+
+      containers:
+        - name: helpconnect-frontend
+          image: 127.0.0.1:30085/2401202-project/helpconnect-frontend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 80
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          volumeMounts:
+            - name: static-content
+              mountPath: /usr/share/nginx/html/static
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+              ephemeral-storage: "1Gi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "2Gi"
+
+      volumes:
+        - name: static-content
+          persistentVolumeClaim:
+            claimName: helpconnect-frontend-pvc
+
+---
+# -------------------------------
+# 3. SERVICE
+# -------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: helpconnect-frontend-service
+  namespace: "2401202"
+spec:
+  selector:
+    app: helpconnect-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# -------------------------------
+# 4. INGRESS
+# -------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: helpconnect-frontend-ingress
+  namespace: "2401202"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: helpconnect.imcc.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: helpconnect-frontend-service
+                port:
+                  number: 80
