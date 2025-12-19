@@ -81,14 +81,14 @@ spec:
             steps {
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-helpconnect', variable: 'SONAR_TOKEN')]) {
-                        sh """
+                        sh '''
                             sonar-scanner \
-                              -Dsonar.projectKey=2401205_HelpConnect \
+                              -Dsonar.projectKey=HelpConnect \
                               -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
                               -Dsonar.token=$SONAR_TOKEN \
                               -Dsonar.sources=src \
                               -Dsonar.exclusions=node_modules/**,dist/**
-                        """
+                        '''
                     }
                 }
             }
