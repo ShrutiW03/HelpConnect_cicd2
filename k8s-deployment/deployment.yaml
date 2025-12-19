@@ -5,7 +5,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: helpconnect-frontend-pvc
-  namespace: "2401202"
+  namespace: "2401205"
 spec:
   storageClassName: local-path
   accessModes:
@@ -22,7 +22,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: helpconnect-frontend-deployment
-  namespace: "2401202"
+  namespace: "2401205"
 spec:
   replicas: 1
   selector:
@@ -40,7 +40,7 @@ spec:
 
       containers:
         - name: helpconnect-frontend
-          image: 127.0.0.1:30085/2401202-project/helpconnect-frontend:latest
+          image: 127.0.0.1:30085/2401205-project/helpconnect-frontend:latest
           imagePullPolicy: Always
 
           ports:
@@ -87,7 +87,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: helpconnect-frontend-service
-  namespace: "2401202"
+  namespace: "2401205"
 spec:
   selector:
     app: helpconnect-frontend
@@ -105,13 +105,13 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: helpconnect-frontend-ingress
-  namespace: "2401202"
+  namespace: "2401205"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
-    - host: helpconnect.imcc.com
+    - host: helpconnect2.imcc.com
       http:
         paths:
           - path: /

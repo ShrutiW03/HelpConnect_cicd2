@@ -58,7 +58,7 @@ spec:
         IMAGE_NAME = "helpconnect-frontend"
         IMAGE_TAG  = "latest"
         NEXUS_REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        NEXUS_REPO = "2401202-project"
+        NEXUS_REPO = "2401205-project"
     }
 
     stages {
@@ -83,7 +83,7 @@ spec:
                     withCredentials([string(credentialsId: 'sonar-token-helpconnect', variable: 'SONAR_TOKEN')]) {
                         sh """
                             sonar-scanner \
-                              -Dsonar.projectKey=2401202_HelpConnect \
+                              -Dsonar.projectKey=2401205_HelpConnect \
                               -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
                               -Dsonar.token=$SONAR_TOKEN \
                               -Dsonar.sources=src \
@@ -125,7 +125,7 @@ spec:
            container('kubectl') {
              dir('k8s-deployment') {
                 sh '''
-                    kubectl apply -f deployment.yaml -n 2401202
+                    kubectl apply -f deployment.yaml -n 2401205
                 '''
                     }
                 }
