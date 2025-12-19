@@ -83,7 +83,7 @@ spec:
                     withCredentials([string(credentialsId: 'sonar-token-helpconnect2', variable: 'SONAR_TOKEN')]) {
                         sh '''
                             sonar-scanner \
-                              -Dsonar.projectKey=HelpConnect \
+                              -Dsonar.projectKey=helpConnect \
                               -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
                               -Dsonar.token=$SONAR_TOKEN \
                               -Dsonar.sources=src \
