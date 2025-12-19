@@ -80,7 +80,7 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-helpconnect', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'sonar-token-helpconnect2', variable: 'SONAR_TOKEN')]) {
                         sh '''
                             sonar-scanner \
                               -Dsonar.projectKey=HelpConnect \
